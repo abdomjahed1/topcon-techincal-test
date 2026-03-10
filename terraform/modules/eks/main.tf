@@ -71,6 +71,25 @@ resource "aws_iam_role_policy_attachment" "node_policy_worker_attachment" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 }
 
+resource "aws_iam_role_policy" "node_secrets_manager_policy" {
+  name = "prueba-it-node-secrets-manager-policy"
+  role = aws_iam_role.eks_node_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # -------------------------
 # EKS CLUSTER
 # -------------------------
