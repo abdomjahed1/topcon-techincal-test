@@ -66,3 +66,7 @@ output "rds_secret_arn" {
 output "ecr_repository_url" {
   value = module.ecr.repository_url
 }
+
+output "rds_secret_name" {
+  value = module.rds.secret_name
+}

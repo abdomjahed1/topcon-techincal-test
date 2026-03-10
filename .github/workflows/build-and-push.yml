@@ -74,13 +74,16 @@ jobs:
 
     - name: Create production namespace
       run: kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
-
-    - name: Update image tag in deployment
+    - name: Update image tag and inject RDS secret name
       run: |
         cd wordpress/k8s
         # Update image tag
         sed -i "s|image:.*|image: ${{ secrets.ECR_URL }}:${{ needs.build.outputs.image_tag }}|" deployment.yaml
-        # Update secret name fallback if needed, but we rely on the manual one for now
+        
+        # Fetch the secret name from AWS Secrets Manager using prefix
+        SECRET_NAME=$(aws secretsmanager list-secrets --filter Key="name",Values="prueba-it/rds/wordpress-credentials-" --query "SecretList[0].Name" --output text)
+        echo "Updating secrets.yaml with secret name: $SECRET_NAME"
+        sed -i "s|SECRET_NAME_PLACEHOLDER|$SECRET_NAME|g" secrets.yaml
 
     - name: Deploy to production
       run: kubectl apply -f wordpress/k8s/ -n production
