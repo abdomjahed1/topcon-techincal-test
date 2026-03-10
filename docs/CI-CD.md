@@ -1,114 +1,55 @@
-# CI/CD Pipeline – WordPress on AWS EKS
+# Setting up an End-to-End CI/CD Pipeline – WordPress on AWS EKS
 
-## End-to-End Pipeline: Dev to Production
-
-The pipeline follows a **GitOps-inspired** approach where all changes flow through Git. Developers work on feature branches, create Pull Requests to `main`, and the pipeline automates quality checks, security scanning, containerization, and deployment across environments.
-
-### Flow
-
-1. **Developer pushes code** to a feature branch and opens a Pull Request against `main`.
-2. **Lint & Quality stage** runs automatically: PHP CodeSniffer validates WordPress coding standards, `kubeval` validates Kubernetes manifests, and `terraform fmt` checks Terraform formatting.
-3. **Security stage**: Trivy scans the Docker image for CVEs (Critical/High severity) and the Terraform code for misconfigurations.
-4. **On merge to `main`**, the Build stage creates the Docker image, tags it with the commit SHA for traceability, and pushes it to Amazon ECR.
-5. **Staging deployment** automatically applies the K8s manifests to the `staging` namespace on EKS, waits for a successful rollout, and verifies pod health.
-6. **Production deployment** requires **manual approval** via GitHub Environments. After a reviewer approves, the same verified image is deployed to the `production` namespace.
-
-This ensures that every image deployed to production has passed lint checks, security scans, and a full staging validation.
+To set up an end-to-end CI/CD pipeline for a WordPress application on AWS EKS, the main goal is to automate the flow from development to production while ensuring code quality, security, and reliable deployments.
 
 ---
 
 ## Recommended Tools
 
-| Category | Tool | Rationale |
-|---|---|---|
-| **CI/CD Platform** | GitHub Actions | Native integration with GitHub, free for public repos, rich marketplace |
-| **Container Registry** | Amazon ECR | Native AWS integration, lifecycle policies, image scanning |
-| **Container Scanning** | Trivy | Open-source, fast, detects OS & app vulnerabilities |
-| **IaC Scanning** | Trivy (config mode) | Same tool for container + IaC scans, reduces toolchain complexity |
-| **Linting (PHP)** | PHP CodeSniffer | WordPress-specific ruleset available |
-| **K8s Validation** | kubeval | Validates manifests against K8s OpenAPI schemas |
-| **IaC** | Terraform | Declarative, AWS-native provider, reusable modules |
-| **Orchestration** | Amazon EKS | Managed Kubernetes, integrates with AWS IAM, autoscaling |
-
-### Key CI/CD Cycle Steps
-
-1. **Source** → Git push / PR triggers pipeline
-2. **Lint** → Static analysis (PHP, Terraform, K8s YAML)
-3. **Test** → Unit/integration tests (extensible for WordPress themes/plugins)
-4. **Security** → Container vulnerability scan + IaC misconfiguration scan
-5. **Build** → Docker image creation + push to ECR
-6. **Deploy (Staging)** → Automated deployment + rollout verification
-7. **Deploy (Production)** → Manual gate + deployment + health check
+- **GitHub Actions** – Automates the pipeline from pull requests to deployment. Supports triggers, workflow approvals, and environment protection rules.  
+- **Amazon ECR** – Securely stores Docker images, supports automated scans, and integrates with AWS services.  
+- **Trivy** – Scans both Docker images and Terraform code for vulnerabilities and misconfigurations.  
+- **Terraform** – Defines AWS infrastructure as code, enabling versioned and repeatable deployments.  
+- **Amazon EKS** – Managed Kubernetes service for running WordPress, handling scaling, health checks, and cluster maintenance.
 
 ---
 
-## Code Quality & Security in the Pipeline
+## CI/CD Cycle Steps
 
-**Code Quality** is enforced at the earliest stage to provide fast feedback:
-- **PHP CodeSniffer** with WordPress standards catches coding standard violations before they reach the container.
-- **Terraform `fmt`** ensures consistent infrastructure code formatting.
-- **kubeval** validates K8s manifests are syntactically correct and compatible with the target cluster version.
-- Future extensions: SonarQube or SonarCloud for deeper static analysis, code coverage thresholds, and technical debt tracking.
+1. **Git push / Pull Request**  
+   Developers push code to a feature branch and open a PR to the main branch. This triggers the pipeline automatically, ensuring that every change is reviewed and tested before merging.
 
-**Security** is integrated as a gate before the build reaches any environment:
-- **Trivy container scan** blocks the pipeline on CRITICAL/HIGH CVEs in the Docker image (OS packages and application dependencies).
-- **Trivy IaC scan** checks Terraform code for security misconfigurations (open security groups, missing encryption, public resources).
-- **ECR scan-on-push** provides a secondary layer of image scanning in the registry itself.
-- Future extensions: OWASP ZAP for DAST (dynamic application security testing) against the staging environment, Snyk for dependency monitoring, and AWS GuardDuty for runtime threat detection.
+2. **Quality checks**  
+   Automated checks run on both the application code and infrastructure configurations. This includes syntax validation, configuration verification, and basic logic checks. Errors or inconsistencies are caught early, preventing problems later in the pipeline.
 
----
+3. **Security checks**  
+   Docker images and Terraform code are scanned for vulnerabilities and risky configurations. The pipeline will fail if critical issues are found, preventing insecure code from being deployed.
 
-## Pipeline Diagram
+4. **Build and push Docker image**  
+   Once the code passes quality and security checks, a Docker image is built. The image is tagged with the commit SHA for traceability and pushed to Amazon ECR, making it ready for deployment.
 
-```mermaid
-flowchart LR
-    subgraph Trigger
-        A[Git Push / PR]
-    end
+5. **Deploy to production**  
+   After successful validation in staging, the same Docker image can be deployed to production. Manual approval gates ensure that only reviewed and tested changes go live, maintaining reliability.
 
-    subgraph "Quality Gates"
-        B[PHP CodeSniffer]
-        C[kubeval]
-        D[Terraform fmt]
-    end
-
-    subgraph Security
-        E[Trivy Container Scan]
-        F[Trivy IaC Scan]
-    end
-
-    subgraph Build
-        G[Docker Build]
-        H[Push to ECR]
-    end
-
-    subgraph Deploy
-        I[Staging Namespace]
-        J[Rollout Verification]
-        K{Manual Approval}
-        L[Production Namespace]
-    end
-
-    A --> B & C & D
-    B & C & D --> E & F
-    E & F --> G --> H
-    H --> I --> J --> K
-    K -->|Approved| L
-```
 
 ---
 
-## GitHub Secrets Required
+## Code Quality and Security Integration
 
-| Secret | Description |
-|---|---|
-| `AWS_ACCESS_KEY_ID` | AWS IAM access key for ECR and EKS |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key |
-| `ECR_URL` | Full ECR repository URL (e.g., `123456789.dkr.ecr.eu-west-3.amazonaws.com/mi-ecr-de-prueba`) |
+**Code quality** is integrated early in the pipeline to provide fast feedback and prevent errors from propagating. Checks include syntax validation, formatting, and infrastructure configuration verification.
 
-## GitHub Environments Required
+**Security** is enforced before building and deploying images. Docker images are scanned for vulnerabilities, and Terraform code is checked for misconfigurations such as open resources or missing encryption. Optional extensions could include dependency monitoring, dynamic security testing, or runtime threat detection.
 
-| Environment | Protection Rules |
-|---|---|
-| `staging` | None (auto-deploy) |
-| `production` | Required reviewers (at least 1 approver) |
+By integrating code quality and security into every stage, the pipeline ensures that **only tested, secure, and verified code** reaches production, reducing risks and maintaining a predictable deployment process.
+
+---
+
+## Summary
+
+The end-to-end CI/CD pipeline for WordPress on AWS EKS involves:  
+- Triggering automated workflows from Git events.  
+- Running quality checks and security scans before building images.  
+- Building Docker images and pushing them to a registry.  
+- Deploying production.
+
+This approach, using **GitHub Actions, Amazon ECR, Trivy, Terraform, and Amazon EKS**, provides a secure, automated, and maintainable deployment process from development to production.
