@@ -1,0 +1,81 @@
+# =============================================================================
+# Quick Deploy Manifest – WordPress
+# This version uses a manual Secret and a LoadBalancer Service for immediate results.
+# =============================================================================
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wordpress-db-secrets
+type: Opaque
+stringData:
+  db-host: "prueba-it-rds.cnukk2amkdib.eu-west-3.rds.amazonaws.com:3306"
+  db-user: "wpuser"
+  # Note: You can fetch the generated password from AWS Secrets Manager if needed
+  # For this quick test, we assume the password or manually set it if known.
+  # Since it's random, fetching it via CLI is best: 
+  # aws secretsmanager get-secret-value --secret-id <SECRET_ARN> --query SecretString --output text
+  db-password: "K&PQEm4F!z*OSrKUF}-z{)TG" 
+  db-name: "wordpress"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+      - name: wordpress
+        image: 395546909534.dkr.ecr.eu-west-3.amazonaws.com/mi-ecr-de-prueba:latest
+        ports:
+        - containerPort: 80
+        env:
+        - name: WORDPRESS_DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: wordpress-db-secrets
+              key: db-host
+        - name: WORDPRESS_DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: wordpress-db-secrets
+              key: db-user
+        - name: WORDPRESS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: wordpress-db-secrets
+              key: db-password
+        - name: WORDPRESS_DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: wordpress-db-secrets
+              key: db-name
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: wordpress

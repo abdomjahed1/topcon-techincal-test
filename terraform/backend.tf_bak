@@ -1,0 +1,9 @@
+terraform {
+  backend "s3" {
+    bucket         = "TU-NOMBRE-DE-BUCKET" # El que devuelva CloudFormation
+    key            = "dev/terraform.tfstate"
+    region         = "eu-west-3"
+    dynamodb_table = "prueba-it-terraform-lock"
+    encrypt        = true
+  }
+}
